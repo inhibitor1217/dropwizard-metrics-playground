@@ -5,6 +5,7 @@ import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
+import io.inhibitor.services.MetricsModule;
 import ru.vyarus.dropwizard.guice.GuiceBundle;
 
 public class DropwizardMetricsPlaygroundApplication extends
@@ -27,7 +28,10 @@ public class DropwizardMetricsPlaygroundApplication extends
 
     bootstrap.addBundle(
         GuiceBundle.builder()
-            .enableAutoConfig("io.inhibitor.resources")
+            .enableAutoConfig("io.inhibitor.resources", "io.inhibitor.services")
+            .modules(
+                new MetricsModule()
+            )
             .build()
     );
   }
