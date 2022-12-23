@@ -3,9 +3,9 @@ package io.inhibitor.services.job;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.RatioGauge;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -44,6 +44,16 @@ public class JobQueue implements Job {
         MetricRegistry.name(JobQueue.class, "thread-pool", "completed-tasks"),
         (Gauge<Long>) threadPoolExecutor::getCompletedTaskCount
     );
+
+    metricRegistry.register(
+        MetricRegistry.name(JobQueue.class, "thread-pool", "core-thread-utilization"),
+        new CoreThreadUtilizationGauge()
+    );
+
+    metricRegistry.register(
+        MetricRegistry.name(JobQueue.class, "thread-pool", "job-success-rate"),
+        new JobSuccessRateGauge()
+    );
   }
 
   @Override
@@ -56,5 +66,25 @@ public class JobQueue implements Job {
   public <T> CompletableFuture<T> supply(Supplier<T> supplier) {
     runMeter.mark();
     return CompletableFuture.supplyAsync(supplier, threadPoolExecutor);
+  }
+
+  private class CoreThreadUtilizationGauge extends RatioGauge {
+    @Override
+    protected Ratio getRatio() {
+      return Ratio.of(
+          threadPoolExecutor.getActiveCount(),
+          threadPoolExecutor.getCorePoolSize()
+      );
+    }
+  }
+
+  private class JobSuccessRateGauge extends RatioGauge {
+    @Override
+    protected Ratio getRatio() {
+      return Ratio.of(
+          threadPoolExecutor.getCompletedTaskCount(),
+          threadPoolExecutor.getTaskCount()
+      );
+    }
   }
 }
