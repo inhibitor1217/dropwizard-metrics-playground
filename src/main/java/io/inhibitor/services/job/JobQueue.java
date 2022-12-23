@@ -7,6 +7,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.RatioGauge;
+import com.codahale.metrics.Timer;
 import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +35,7 @@ public class JobQueue implements Job {
 
   private final Counter failedJobsCounter;
 
-  private final Histogram jobRunTimeHistogram;
+  private final Timer jobRunTimeTimer;
 
   @Inject
   public JobQueue(
@@ -54,8 +55,7 @@ public class JobQueue implements Job {
     this.failureMeter = metricRegistry.meter(MetricRegistry.name(JobQueue.class, "failure"));
     this.succeededJobsCounter = metricRegistry.counter(MetricRegistry.name(JobQueue.class, "succeeded-jobs"));
     this.failedJobsCounter = metricRegistry.counter(MetricRegistry.name(JobQueue.class, "failed-jobs"));
-    this.jobRunTimeHistogram = metricRegistry.histogram(MetricRegistry.name(JobQueue.class, "job-run-time"),
-        () -> new Histogram(new ExponentiallyDecayingReservoir()));
+    this.jobRunTimeTimer = metricRegistry.timer(MetricRegistry.name(JobQueue.class, "job-run-time"));
 
     metricRegistry.register(
         MetricRegistry.name(JobQueue.class, "thread-pool", "active-threads"),
@@ -82,16 +82,16 @@ public class JobQueue implements Job {
   public CompletableFuture<Void> run(Runnable runnable) {
     runMeter.mark();
     return CompletableFuture.runAsync(() -> {
+      final var context = jobRunTimeTimer.time();
       try {
-        long start = System.nanoTime();
         runnable.run();
         successMeter.mark();
         succeededJobsCounter.inc();
-        long elapsedTime = System.nanoTime() - start;
-        jobRunTimeHistogram.update(Duration.ofNanos(elapsedTime).toMillis());
       } catch (Exception e) {
         failureMeter.mark();
         failedJobsCounter.inc();
+      } finally {
+        context.stop();
       }
     }, threadPoolExecutor);
   }
@@ -100,18 +100,18 @@ public class JobQueue implements Job {
   public <T> CompletableFuture<T> supply(Supplier<T> supplier) {
     runMeter.mark();
     return CompletableFuture.supplyAsync(() -> {
+      final var context = jobRunTimeTimer.time();
       try {
-        long start = System.nanoTime();
         T result = supplier.get();
         successMeter.mark();
         succeededJobsCounter.inc();
-        long elapsedTime = System.nanoTime() - start;
-        jobRunTimeHistogram.update(Duration.ofNanos(elapsedTime).toMillis());
         return result;
       } catch (Exception e) {
         failureMeter.mark();
         failedJobsCounter.inc();
         throw e;
+      } finally {
+        context.stop();
       }
     }, threadPoolExecutor);
   }
