@@ -5,6 +5,7 @@ import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
+import io.inhibitor.services.job.JobModule;
 import io.inhibitor.services.metrics.MetricsModule;
 import ru.vyarus.dropwizard.guice.GuiceBundle;
 
@@ -30,6 +31,7 @@ public class DropwizardMetricsPlaygroundApplication extends
         GuiceBundle.builder()
             .enableAutoConfig("io.inhibitor.resources", "io.inhibitor.services")
             .modules(
+                new JobModule(),
                 new MetricsModule()
             )
             .build()
