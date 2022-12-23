@@ -4,6 +4,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 public class JobQueue implements Job {
 
@@ -26,5 +27,10 @@ public class JobQueue implements Job {
   @Override
   public CompletableFuture<Void> run(Runnable runnable) {
     return CompletableFuture.runAsync(runnable, threadPoolExecutor);
+  }
+
+  @Override
+  public <T> CompletableFuture<T> supply(Supplier<T> supplier) {
+    return CompletableFuture.supplyAsync(supplier, threadPoolExecutor);
   }
 }
