@@ -1,5 +1,6 @@
 package io.inhibitor.services.job;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -20,6 +21,14 @@ public class JobQueue implements Job {
 
   private final Meter runMeter;
 
+  private final Meter successMeter;
+
+  private final Meter failureMeter;
+
+  private final Counter succeededJobsCounter;
+
+  private final Counter failedJobsCounter;
+
   @Inject
   public JobQueue(
       MetricRegistry metricRegistry
@@ -34,6 +43,10 @@ public class JobQueue implements Job {
     );
 
     this.runMeter = metricRegistry.meter(MetricRegistry.name(JobQueue.class, "run"));
+    this.successMeter = metricRegistry.meter(MetricRegistry.name(JobQueue.class, "success"));
+    this.failureMeter = metricRegistry.meter(MetricRegistry.name(JobQueue.class, "failure"));
+    this.succeededJobsCounter = metricRegistry.counter(MetricRegistry.name(JobQueue.class, "succeeded-jobs"));
+    this.failedJobsCounter = metricRegistry.counter(MetricRegistry.name(JobQueue.class, "failed-jobs"));
 
     metricRegistry.register(
         MetricRegistry.name(JobQueue.class, "thread-pool", "active-threads"),
@@ -59,13 +72,33 @@ public class JobQueue implements Job {
   @Override
   public CompletableFuture<Void> run(Runnable runnable) {
     runMeter.mark();
-    return CompletableFuture.runAsync(runnable, threadPoolExecutor);
+    return CompletableFuture.runAsync(() -> {
+      try {
+        runnable.run();
+        successMeter.mark();
+        succeededJobsCounter.inc();
+      } catch (Exception e) {
+        failureMeter.mark();
+        failedJobsCounter.inc();
+      }
+    }, threadPoolExecutor);
   }
 
   @Override
   public <T> CompletableFuture<T> supply(Supplier<T> supplier) {
     runMeter.mark();
-    return CompletableFuture.supplyAsync(supplier, threadPoolExecutor);
+    return CompletableFuture.supplyAsync(() -> {
+      try {
+        T result = supplier.get();
+        successMeter.mark();
+        succeededJobsCounter.inc();
+        return result;
+      } catch (Exception e) {
+        failureMeter.mark();
+        failedJobsCounter.inc();
+        throw e;
+      }
+    }, threadPoolExecutor);
   }
 
   private class CoreThreadUtilizationGauge extends RatioGauge {
@@ -82,8 +115,8 @@ public class JobQueue implements Job {
     @Override
     protected Ratio getRatio() {
       return Ratio.of(
-          threadPoolExecutor.getCompletedTaskCount(),
-          threadPoolExecutor.getTaskCount()
+          successMeter.getCount(),
+          succeededJobsCounter.getCount() + failedJobsCounter.getCount()
       );
     }
   }
