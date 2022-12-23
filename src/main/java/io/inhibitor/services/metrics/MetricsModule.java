@@ -1,4 +1,4 @@
-package io.inhibitor.services;
+package io.inhibitor.services.metrics;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.inject.AbstractModule;
